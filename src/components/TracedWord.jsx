@@ -5,6 +5,7 @@ import {
   angleDeg,
   lerpPt,
   rayExitDistance,
+  polylineLength,
 } from './trace-utils.js'
 
 const OFFSCREEN_MARGIN = 90 // px past the viewport edge before the plane "stops"
@@ -50,11 +51,15 @@ export default function TracedWord({
     const ctm = path.getScreenCTM()
     const rect = wrap.getBoundingClientRect()
     const scale = ctm.a
-    const pathLen = path.getTotalLength()
 
+    // Reveal the stroke GEOMETRICALLY by rebuilding the path `d` up to the
+    // current point, instead of using stroke-dash. WebKit/iOS mis-scales dash
+    // length and dash normalization (pathLength) on scaled SVGs, which tiled the
+    // stroke into multiple dashes. A growing polyline draws from one end on
+    // every engine. `tokens` is one "M.." / "L.." command per point.
     path.style.strokeWidth = `${strokePx / scale}`
-    path.style.strokeDasharray = `${pathLen}`
-    path.style.strokeDashoffset = `${pathLen}`
+    const tokens = word.polyD.match(/[ML][^ML]*/g) || []
+    path.setAttribute('d', '') // start with nothing drawn
 
     // user coords -> px relative to this word's wrapper
     const sp = svg.createSVGPoint()
@@ -88,7 +93,9 @@ export default function TracedWord({
     }
 
     const wEnter = entranceDist
-    const wDraw = pathLen * scale // on-screen length of the stroke
+    // on-screen stroke length from the precomputed data (not getTotalLength,
+    // which WebKit reports inconsistently) so the draw speed is correct too
+    const wDraw = polylineLength(word.points) * scale
     const wExit = exitDist
     const total = wEnter + wDraw + wExit
     const duration = total / rate
@@ -101,22 +108,47 @@ export default function TracedWord({
       }deg)`
     }
 
+    // Only rewrite the DOM `d` when the drawn point index changes, and append
+    // incrementally — avoids re-slicing/joining and re-parsing the whole path
+    // string every frame (the plane still moves every frame; that's cheap).
+    const lastIdx = tokens.length - 1
+    let drawnK = -1
+    let drawnD = ''
+    const drawTo = (k) => {
+      if (k === drawnK) return
+      if (k < drawnK) {
+        drawnD = tokens.slice(0, k + 1).join('')
+      } else {
+        for (let j = drawnK + 1; j <= k; j++) drawnD += tokens[j]
+      }
+      drawnK = k
+      path.setAttribute('d', drawnD)
+    }
+
     const render = (pr) => {
       const d = pr * total
       if (d < wEnter) {
         // entrance — no ink yet
-        path.style.strokeDashoffset = `${pathLen}`
+        if (drawnK !== -1) {
+          drawnK = -1
+          drawnD = ''
+          path.setAttribute('d', '')
+        }
         place(lerpPt(entranceStart, startLocal, wEnter ? d / wEnter : 1), enterDeg)
       } else if (d < wEnter + wDraw) {
-        // drawing
+        // drawing — grow the polyline up to the current point
         const f = (d - wEnter) / wDraw
-        path.style.strokeDashoffset = `${pathLen * (1 - f)}`
+        drawTo(Math.floor(f * lastIdx))
         const here = at(f)
         const ahead = at(Math.min(1, f + 0.01))
         place(here, angleDeg(ahead.x - here.x, ahead.y - here.y))
       } else {
         // exit — stroke fully drawn
-        path.style.strokeDashoffset = '0'
+        if (drawnK !== lastIdx) {
+          drawnD = word.polyD
+          drawnK = lastIdx
+          path.setAttribute('d', word.polyD)
+        }
         if (!doneRef.current) {
           doneRef.current = true
           onCompleteRef.current?.()
