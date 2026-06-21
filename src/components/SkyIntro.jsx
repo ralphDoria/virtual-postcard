@@ -78,11 +78,6 @@ export default function SkyIntro({ greeting, onAlmostDone }) {
 
   return (
     <div className="sky fill" aria-label={greeting}>
-      {/* drifting clouds for ambiance */}
-      <div className="cloud cloud--a" />
-      <div className="cloud cloud--b" />
-      <div className="cloud cloud--c" />
-
       <div className="sky__writing">
         {words.map((word, i) => (
           <TracedWord

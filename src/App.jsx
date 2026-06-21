@@ -18,6 +18,9 @@ export default function App() {
 
   return (
     <div className="stage">
+      {/* sky + drifting clouds are always live, including under the gate */}
+      <Clouds />
+
       {!started && <StartGate onStart={() => setStarted(true)} />}
 
       {started && (
@@ -40,11 +43,20 @@ export default function App() {
   )
 }
 
+function Clouds() {
+  return (
+    <div className="clouds fill" aria-hidden="true">
+      <div className="cloud cloud--a" />
+      <div className="cloud cloud--b" />
+      <div className="cloud cloud--c" />
+    </div>
+  )
+}
+
 function StartGate({ onStart }) {
   return (
     <button className="start-gate" onClick={onStart} aria-label="Tap to begin">
       <span className="start-gate__text">Tap to begin</span>
-      <span className="start-gate__hint">Happy Father&rsquo;s Day</span>
     </button>
   )
 }
