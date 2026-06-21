@@ -1,0 +1,401 @@
+/* ───────────────────────── Step 1: Sky ───────────────────────── */
+.sky {
+  overflow: hidden;
+}
+
+.sky__writing {
+  position: absolute;
+  top: 33%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(82vw, 400px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.4vh;
+}
+
+/* one word = one stacked line, traced by the plane */
+.greeting-line {
+  width: 100%;
+}
+.greeting-line svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+/* draw as a white sky-writing stroke; stroke-width is set per-word in JS
+   (targetPx / scale) so dashes stay in user units AND thickness looks uniform */
+.greeting-line svg path {
+  fill: none;
+  stroke: #ffffff;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 2px 6px rgba(40, 90, 150, 0.22));
+}
+
+/* the plane rides the leading tip of the stroke (positioned via JS transform) */
+.plane {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 38px;
+  height: 38px;
+  margin: -19px 0 0 -19px; /* center the icon on its (x,y) point */
+  filter: drop-shadow(0 3px 4px rgba(0, 60, 120, 0.25));
+  z-index: 2;
+  will-change: transform;
+}
+
+/* clouds */
+.cloud {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 100px;
+  filter: blur(2px);
+  opacity: 0.8;
+}
+.cloud::before,
+.cloud::after {
+  content: '';
+  position: absolute;
+  background: inherit;
+  border-radius: 100px;
+}
+.cloud--a {
+  width: 120px;
+  height: 34px;
+  top: 14%;
+  left: -140px;
+  animation: drift 26s linear infinite;
+}
+.cloud--b {
+  width: 90px;
+  height: 26px;
+  top: 62%;
+  left: -120px;
+  animation: drift 34s linear infinite 4s;
+}
+.cloud--c {
+  width: 150px;
+  height: 40px;
+  top: 78%;
+  left: -180px;
+  animation: drift 30s linear infinite 8s;
+}
+.cloud::before {
+  width: 60%;
+  height: 160%;
+  top: -50%;
+  left: 12%;
+}
+.cloud::after {
+  width: 45%;
+  height: 150%;
+  top: -40%;
+  right: 14%;
+}
+@keyframes drift {
+  to {
+    transform: translateX(140vw);
+  }
+}
+
+/* ─────────────────────── Step 2: Envelope ─────────────────────── */
+/* full-stage centering so the envelope rests in the middle of the screen */
+.envelope-center {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  z-index: 5;
+}
+
+.envelope-wrap {
+  position: relative;
+  width: min(86vw, 380px);
+  height: min(62vw, 38vh, 280px);
+  touch-action: none;
+}
+
+.envelope {
+  position: absolute;
+  inset: 0;
+  perspective: 800px;
+  will-change: transform;
+}
+
+.envelope__back {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(160deg, var(--envelope), var(--envelope-flap));
+  border-radius: 12px 12px 0 0;
+  box-shadow: 0 -8px 24px var(--envelope-shadow);
+}
+
+/* front pocket: triangle rising from the bottom corners to the center */
+.envelope__pocket {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, #f6e3b4, var(--envelope));
+  border-radius: 12px 12px 0 0;
+  clip-path: polygon(0 100%, 50% 38%, 100% 100%, 100% 100%, 0 100%);
+  z-index: 3;
+  box-shadow: inset 0 6px 18px rgba(120, 90, 30, 0.15);
+}
+
+/* the flap that folds open */
+.envelope__flap {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 62%;
+  background: linear-gradient(160deg, var(--envelope-flap), #dcb85e);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+  transform-origin: top center;
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+  z-index: 4;
+  box-shadow: 0 4px 10px rgba(120, 90, 30, 0.2);
+}
+
+.envelope__hint {
+  position: absolute;
+  top: -54px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #2a4a6a;
+  letter-spacing: 0.02em;
+  text-shadow: 0 1px 6px rgba(255, 255, 255, 0.6);
+  pointer-events: none;
+}
+.envelope__hint-arrow {
+  display: block;
+  font-size: 1.4rem;
+  line-height: 1;
+  margin-bottom: 2px;
+}
+
+/* ───────────────────── Step 3: Postcard stack ─────────────────── */
+.stack-layer {
+  z-index: 10;
+  display: grid;
+  place-items: center;
+}
+
+.stack {
+  position: relative;
+  width: min(86vw, 380px);
+  aspect-ratio: 4 / 5;
+}
+
+.stack__slot {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  will-change: transform;
+}
+
+.stack__swipe {
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  will-change: transform;
+}
+
+.stack__hint {
+  position: absolute;
+  bottom: max(24px, env(safe-area-inset-bottom));
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: rgba(42, 74, 106, 0.7);
+  pointer-events: none;
+}
+
+/* a postcard */
+.postcard {
+  width: 100%;
+  height: 100%;
+  background: var(--paper);
+  border-radius: 16px;
+  box-shadow: 0 12px 30px rgba(40, 70, 110, 0.28),
+    0 2px 6px rgba(40, 70, 110, 0.18);
+  border: 1px solid var(--paper-edge);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.postcard__title {
+  flex: 0 0 auto;
+  margin-top: 10px;
+  font-family: var(--font-script);
+  font-size: 1.5rem;
+  color: var(--accent);
+  text-align: center;
+}
+
+/* collage grid — adapts to photo count */
+.collage {
+  flex: 1 1 auto;
+  display: grid;
+  gap: 8px;
+  min-height: 0;
+}
+.collage--1 {
+  grid-template-columns: 1fr;
+}
+.collage--2 {
+  grid-template-columns: 1fr 1fr;
+}
+.collage--3 {
+  grid-template-columns: 1fr 1fr;
+}
+.collage--3 .collage__cell:first-child {
+  grid-column: 1 / -1;
+}
+.collage--4 {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+.collage--5 {
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+.collage--5 .collage__cell:first-child {
+  grid-column: 1 / 3;
+  grid-row: 1 / 3;
+}
+.collage--6 {
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+.collage__cell {
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #e9eef5;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  transition: transform 0.15s ease;
+}
+.collage__cell:active {
+  transform: scale(0.97);
+}
+.collage__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.collage__placeholder {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #9aa7ba;
+  padding: 4px;
+  text-align: center;
+  background: repeating-linear-gradient(
+    45deg,
+    #eef2f8 0 10px,
+    #e6ebf3 10px 20px
+  );
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+}
+
+/* message card */
+.postcard--message {
+  background: linear-gradient(160deg, #fffdf7, #fff7ea);
+  justify-content: center;
+}
+.message {
+  text-align: center;
+  padding: 8px 14px;
+}
+.message__title {
+  font-family: var(--font-script);
+  font-size: 2rem;
+  color: var(--accent);
+  margin-bottom: 16px;
+}
+.message__body p {
+  font-size: 1.02rem;
+  line-height: 1.55;
+  color: var(--ink);
+  margin-bottom: 12px;
+}
+.message__sign {
+  margin-top: 18px;
+  font-family: var(--font-script);
+  font-size: 1.5rem;
+  color: var(--ink);
+}
+
+/* ───────────────────────── Photo zoom ─────────────────────────── */
+.zoom {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(15, 30, 50, 0.82);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+.zoom__frame {
+  position: relative;
+  background: var(--paper);
+  padding: 12px;
+  border-radius: 12px;
+  max-width: 92vw;
+  max-height: 82vh;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+}
+.zoom__img {
+  display: block;
+  max-width: 100%;
+  max-height: 70vh;
+  border-radius: 6px;
+  object-fit: contain;
+}
+.zoom__placeholder {
+  width: min(80vw, 420px);
+  height: min(60vh, 420px);
+  background: repeating-linear-gradient(
+    45deg,
+    #eef2f8 0 14px,
+    #e6ebf3 14px 28px
+  );
+}
+.zoom__caption {
+  margin-top: 10px;
+  text-align: center;
+  font-weight: 600;
+  color: var(--ink);
+}
+.zoom__close {
+  position: absolute;
+  top: -14px;
+  right: -14px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--ink);
+  font-size: 1.4rem;
+  line-height: 1;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
