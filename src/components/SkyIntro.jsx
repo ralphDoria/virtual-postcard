@@ -4,11 +4,14 @@ import { animate, useMotionValue } from 'framer-motion'
 // Each word: { viewBox, polyD, points: [x0,y0,x1,y1,...] } sampled evenly by
 // true distance, so the browser does no path math during the animation.
 import words from '../data/greeting-traced.js'
+import planeSrc from '../assets/plane-topdown-removebg.png'
 
 // Timing knobs
 const WRITE_DURATION = 30 // seconds to write all three words
 const ENVELOPE_AFTER_WORD = 1 // 0-based: start the envelope once this word finishes
 const STROKE_PX = 3 // on-screen stroke thickness (kept uniform across words)
+// the plane art points "up"; headings are 0deg = +x, so rotate +90 to align
+const PLANE_ROTATION = 90
 
 export default function SkyIntro({ greeting, onAlmostDone }) {
   const containerRef = useRef(null)
@@ -86,7 +89,9 @@ export default function SkyIntro({ greeting, onAlmostDone }) {
     const fireAt = (triggerSeg.start + triggerSeg.weight) / total
 
     const place = (x, y, deg) => {
-      planeRef.current.style.transform = `translate(${x}px, ${y}px) rotate(${deg}deg)`
+      planeRef.current.style.transform = `translate(${x}px, ${y}px) rotate(${
+        deg + PLANE_ROTATION
+      }deg)`
     }
     const heading = (a, b) => (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI
 
@@ -168,17 +173,6 @@ function clamp(v, lo, hi) {
 }
 
 function PlaneIcon() {
-  // points to the right (angle 0 = travelling +x)
-  return (
-    <svg viewBox="0 0 64 64" width="38" height="38" aria-hidden="true">
-      <path
-        d="M4 30 L58 6 L46 32 L58 58 Z M46 32 L18 32"
-        fill="#ffffff"
-        stroke="#cfe9ff"
-        strokeWidth="2"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
-    </svg>
-  )
+  // top-down plane art (nose up); rotation handled in `place` via PLANE_ROTATION
+  return <img className="plane__img" src={planeSrc} alt="" draggable="false" />
 }
