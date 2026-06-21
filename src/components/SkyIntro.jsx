@@ -1,15 +1,12 @@
 import { useLayoutEffect, useRef } from 'react'
 import { animate, useMotionValue } from 'framer-motion'
-// Each word of "Happy Father's Day" as a single-stroke centerline path.
-// To change the lettering, replace these .svg files (one continuous <path> each).
-import word1 from '../assets/happy-fathers-day-1.svg?raw'
-import word2 from '../assets/happy-fathers-day-2.svg?raw'
-import word3 from '../assets/happy-fathers-day-3.svg?raw'
-
-const WORDS = [word1, word2, word3]
+// Precomputed uniform-arc-length traces (see scripts/build-greeting.mjs).
+// Each word: { viewBox, polyD, points: [x0,y0,x1,y1,...] } sampled evenly by
+// true distance, so the browser does no path math during the animation.
+import words from '../data/greeting-traced.js'
 
 // Timing knobs
-const WRITE_DURATION = 4.6 // seconds to write all three words
+const WRITE_DURATION = 30 // seconds to write all three words
 const ENVELOPE_AFTER_WORD = 1 // 0-based: start the envelope once this word finishes
 const STROKE_PX = 3 // on-screen stroke thickness (kept uniform across words)
 
@@ -22,6 +19,10 @@ export default function SkyIntro({ greeting, onAlmostDone }) {
   const firedRef = useRef(false)
   const progress = useMotionValue(0)
 
+  // keep the latest callback in a ref so this setup effect runs once (on mount)
+  const onAlmostDoneRef = useRef(onAlmostDone)
+  onAlmostDoneRef.current = onAlmostDone
+
   useLayoutEffect(() => {
     const container = containerRef.current
     const lines = [line0.current, line1.current, line2.current]
@@ -29,62 +30,56 @@ export default function SkyIntro({ greeting, onAlmostDone }) {
     const svgs = lines.map((l) => l && l.querySelector('svg'))
     if (!container || paths.some((p) => !p)) return
 
-    // 1) tighten each viewBox to its ink so the stacked lines pack nicely
-    const pad = 18
-    paths.forEach((path, i) => {
-      const bb = path.getBBox()
-      svgs[i].setAttribute(
-        'viewBox',
-        `${bb.x - pad} ${bb.y - pad} ${bb.width + pad * 2} ${bb.height + pad * 2}`,
-      )
-    })
+    // one-time layout reads
+    const crect = container.getBoundingClientRect()
+    const ctms = paths.map((p) => p.getScreenCTM())
+    const pts = svgs.map((s) => s.createSVGPoint())
+    const scales = ctms.map((m) => m.a) // screen px per user unit, per word
+    const lens = paths.map((p) => p.getTotalLength()) // polyline = true length
 
-    // 2) prep each stroke as "undrawn"
-    const lens = paths.map((p) => p.getTotalLength())
     paths.forEach((p, i) => {
+      p.style.strokeWidth = `${STROKE_PX / scales[i]}`
       p.style.strokeDasharray = `${lens[i]}`
       p.style.strokeDashoffset = `${lens[i]}`
     })
 
-    // 3) cache screen mapping so we can place the (HTML) plane over the SVGs
-    const crect = container.getBoundingClientRect()
-    const ctms = paths.map((p) => p.getScreenCTM())
-    const pts = svgs.map((s) => s.createSVGPoint())
-
-    // keep on-screen thickness uniform: stroke-width is in user units, and each
-    // word has its own viewBox->screen scale (ctm.a), so divide by that scale.
-    paths.forEach((p, i) => {
-      p.style.strokeWidth = `${STROKE_PX / ctms[i].a}`
-    })
-    const pointAt = (i, l) => {
-      const p = paths[i].getPointAtLength(l)
-      pts[i].x = p.x
-      pts[i].y = p.y
+    // map a uniform point (user coords) to container px
+    const toScreen = (i, ux, uy) => {
+      pts[i].x = ux
+      pts[i].y = uy
       const s = pts[i].matrixTransform(ctms[i])
       return { x: s.x - crect.left, y: s.y - crect.top }
     }
-    const starts = paths.map((_, i) => pointAt(i, 0))
-    const ends = paths.map((_, i) => pointAt(i, lens[i]))
+    // point on word i at fraction f (0..1) — O(1) lookup into the uniform table
+    const screenAt = (i, f) => {
+      const P = words[i].points
+      const n = P.length / 2
+      const idx = clamp(f, 0, 1) * (n - 1)
+      const k = Math.min(Math.floor(idx), n - 2)
+      const t = idx - k
+      const x = P[k * 2] + (P[(k + 1) * 2] - P[k * 2]) * t
+      const y = P[k * 2 + 1] + (P[(k + 1) * 2 + 1] - P[k * 2 + 1]) * t
+      return toScreen(i, x, y)
+    }
+    const starts = paths.map((_, i) => screenAt(i, 0))
+    const ends = paths.map((_, i) => screenAt(i, 1))
 
-    // 4) build a virtual timeline weighted by ON-SCREEN length so every word
-    //    (and glide) traces at a constant screen speed regardless of its scale.
-    const scales = ctms.map((m) => m.a) // screen px per user unit, per word
+    // timeline weighted by on-screen length -> constant screen speed everywhere
     const dist2 = (a, b) => Math.hypot(b.x - a.x, b.y - a.y)
     const segs = []
     let acc = 0
     for (let i = 0; i < paths.length; i++) {
-      const weight = lens[i] * scales[i] // word's on-screen length
-      segs.push({ type: 'draw', i, start: acc, len: lens[i], weight })
+      const weight = lens[i] * scales[i]
+      segs.push({ type: 'draw', i, start: acc, weight })
       acc += weight
       if (i < paths.length - 1) {
-        const glide = dist2(ends[i], starts[i + 1]) // screen distance between lines
+        const glide = dist2(ends[i], starts[i + 1])
         segs.push({ type: 'fly', from: i, to: i + 1, start: acc, weight: glide })
         acc += glide
       }
     }
     const total = acc
 
-    // fire the envelope exactly when the chosen word finishes drawing
     const triggerSeg = segs.find(
       (s) => s.type === 'draw' && s.i === ENVELOPE_AFTER_WORD,
     )
@@ -98,7 +93,7 @@ export default function SkyIntro({ greeting, onAlmostDone }) {
     const render = (p) => {
       const dist = p * total
 
-      // draw state for every word from its own progress
+      // reveal each word up to its own progress
       paths.forEach((path, i) => {
         const seg = segs.find((s) => s.type === 'draw' && s.i === i)
         const f = clamp((dist - seg.start) / seg.weight, 0, 1)
@@ -106,25 +101,22 @@ export default function SkyIntro({ greeting, onAlmostDone }) {
       })
 
       // plane position
-      const seg = segs.find((s) => dist >= s.start && dist <= s.start + s.weight) ||
+      const seg =
+        segs.find((s) => dist >= s.start && dist <= s.start + s.weight) ||
         segs[segs.length - 1]
       if (seg.type === 'draw') {
         const f = clamp((dist - seg.start) / seg.weight, 0, 1)
-        const l = f * seg.len
-        const here = pointAt(seg.i, l)
-        const ahead = pointAt(seg.i, Math.min(seg.len, l + 2))
+        const here = screenAt(seg.i, f)
+        const ahead = screenAt(seg.i, Math.min(1, f + 0.004))
         place(here.x, here.y, heading(here, ahead))
       } else {
         const t = clamp((dist - seg.start) / seg.weight, 0, 1)
         const a = ends[seg.from]
         const b = starts[seg.to]
-        const x = a.x + (b.x - a.x) * t
-        const y = a.y + (b.y - a.y) * t
-        place(x, y, heading(a, b))
+        place(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, heading(a, b))
       }
     }
 
-    // place plane at the very start before animating
     render(0)
 
     const controls = animate(progress, 1, {
@@ -135,7 +127,7 @@ export default function SkyIntro({ greeting, onAlmostDone }) {
       render(p)
       if (!firedRef.current && p >= fireAt) {
         firedRef.current = true
-        onAlmostDone?.()
+        onAlmostDoneRef.current?.()
       }
     })
 
@@ -143,7 +135,9 @@ export default function SkyIntro({ greeting, onAlmostDone }) {
       controls.stop()
       unsub()
     }
-  }, [progress, onAlmostDone])
+    // build-once: progress is stable; callback read via ref
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [progress])
 
   return (
     <div className="sky fill" aria-label={greeting}>
@@ -153,24 +147,13 @@ export default function SkyIntro({ greeting, onAlmostDone }) {
       <div className="cloud cloud--c" />
 
       <div className="sky__writing" ref={containerRef}>
-        <div
-          className="greeting-line"
-          ref={line0}
-          aria-hidden="true"
-          dangerouslySetInnerHTML={{ __html: WORDS[0] }}
-        />
-        <div
-          className="greeting-line"
-          ref={line1}
-          aria-hidden="true"
-          dangerouslySetInnerHTML={{ __html: WORDS[1] }}
-        />
-        <div
-          className="greeting-line"
-          ref={line2}
-          aria-hidden="true"
-          dangerouslySetInnerHTML={{ __html: WORDS[2] }}
-        />
+        {[line0, line1, line2].map((ref, i) => (
+          <div className="greeting-line" ref={ref} key={i}>
+            <svg viewBox={words[i].viewBox} preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+              <path d={words[i].polyD} fill="none" />
+            </svg>
+          </div>
+        ))}
 
         <div className="plane" ref={planeRef} aria-hidden="true">
           <PlaneIcon />
