@@ -32,7 +32,7 @@ body {
   color: var(--ink);
   overflow: hidden; /* the experience is a fixed "stage", no page scroll */
   overscroll-behavior: none;
-  background: var(--sky-bottom);
+  background: var(--sky-top); /* match Safari's top status-bar backdrop */
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
