@@ -1,0 +1,2 @@
+# Drop your photo files in this folder, then reference them in
+# src/data/content.js as e.g. "/photos/your-file.jpg"

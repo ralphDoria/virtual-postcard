@@ -1,0 +1,75 @@
+:root {
+  --sky-top: #8fd3ff;
+  --sky-bottom: #d8f1ff;
+  --ink: #2a2f45;
+  --paper: #fffdf7;
+  --paper-edge: #efe9da;
+  --accent: #e8736a;
+  --envelope: #f2d9a0;
+  --envelope-flap: #e7c878;
+  --envelope-shadow: rgba(120, 90, 30, 0.35);
+
+  --font-script: 'Dancing Script', cursive;
+  --font-body: 'Nunito', system-ui, -apple-system, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+}
+
+body {
+  font-family: var(--font-body);
+  color: var(--ink);
+  overflow: hidden; /* the experience is a fixed "stage", no page scroll */
+  overscroll-behavior: none;
+  background: var(--sky-bottom);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+#root {
+  position: fixed;
+  inset: 0;
+}
+
+/* The stage fills the viewport using dynamic vh so iOS browser chrome
+   doesn't crop the bottom of the experience. */
+.stage {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background: linear-gradient(180deg, var(--sky-top) 0%, var(--sky-bottom) 100%);
+  /* respect iPhone safe areas */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+    env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+.fill {
+  position: absolute;
+  inset: 0;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: inherit;
+}
+
+img {
+  -webkit-user-drag: none;
+  user-select: none;
+}
