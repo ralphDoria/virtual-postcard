@@ -172,6 +172,7 @@
   position: absolute;
   inset: 0;
   perspective: 800px;
+  transform-style: preserve-3d; /* flap rotates in true 3D vs the back/pocket */
   will-change: transform;
 }
 
@@ -205,7 +206,8 @@
   clip-path: polygon(0 0, 100% 0, 50% 100%);
   transform-origin: top center;
   transform-style: preserve-3d;
-  backface-visibility: hidden;
+  /* no backface-visibility: hidden — the flap stays visible past 90° as it
+     folds back open (front/back are the same gradient) */
   z-index: 4;
   box-shadow: 0 4px 10px rgba(120, 90, 30, 0.2);
 }
