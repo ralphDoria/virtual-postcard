@@ -1,31 +1,45 @@
-import { useEffect, useState } from 'react'
-import {
-  motion,
-  useMotionValue,
-  animate,
-  AnimatePresence,
-} from 'framer-motion'
+import { useEffect, useRef, useState } from 'react'
+import { motion, useMotionValue, animate, AnimatePresence } from 'framer-motion'
 import Postcard from './Postcard.jsx'
 
-const MAX_VISIBLE = 4 // how many cards show depth behind the top one
-const SWIPE_COMMIT = 70 // px upward to count as a swipe
+const MAX_VISIBLE = 3 // how many cards show depth behind the front one
+const DEPTH_Y = -14 // px each deeper card shifts up
+const DEPTH_SCALE = 0.05 // scale lost per depth step
+const SWIPE_COMMIT = 60 // px to count as a swipe
+const ARC_DURATION = 0.5 // seconds for a card to arc over the top
+const SPRING = { type: 'spring', stiffness: 260, damping: 30 }
+
+// resting transform for a card at a given depth in the stack
+function presentation(rank, total) {
+  const depth = Math.min(rank, MAX_VISIBLE)
+  return {
+    y: depth * DEPTH_Y,
+    scale: 1 - depth * DEPTH_SCALE,
+    zIndex: total - rank,
+  }
+}
 
 export default function PostcardStack({ postcards }) {
-  // order = array of card ids, index 0 is the top of the stack.
+  // order = card ids; index 0 is the front of the stack.
   const [order, setOrder] = useState(() => postcards.map((p) => p.id))
-  const [flyingId, setFlyingId] = useState(null)
-  const [zoom, setZoom] = useState(null) // a photo object when zoomed
+  const [moving, setMoving] = useState(null) // { id, dir: 'up' | 'down' }
+  const [zoom, setZoom] = useState(null)
 
   const byId = Object.fromEntries(postcards.map((p) => [p.id, p]))
 
-  const sendTopToBack = () => {
-    const topId = order[0]
-    setFlyingId(topId)
-    // after the fly-up finishes, rotate it to the bottom
-    setTimeout(() => {
+  // up = advance (front card arcs over the top to the back)
+  // down = reverse (back card arcs over the top to the front)
+  const swipe = (dir) => {
+    if (moving) return
+    if (dir === 'up') {
+      const id = order[0]
       setOrder((o) => [...o.slice(1), o[0]])
-      setFlyingId(null)
-    }, 340)
+      setMoving({ id, dir: 'up' })
+    } else {
+      const id = order[order.length - 1]
+      setOrder((o) => [o[o.length - 1], ...o.slice(0, -1)])
+      setMoving({ id, dir: 'down' })
+    }
   }
 
   return (
@@ -42,81 +56,117 @@ export default function PostcardStack({ postcards }) {
             card={byId[id]}
             rank={rank}
             total={order.length}
-            isFlying={flyingId === id}
-            onCommit={sendTopToBack}
+            mover={moving?.id === id}
+            dir={moving?.dir}
+            locked={!!moving}
+            onArcDone={() => setMoving(null)}
+            onSwipe={swipe}
             onZoomPhoto={(photo) => setZoom(photo)}
           />
         ))}
       </div>
 
-      <div className="stack__hint">Swipe a card up</div>
+      <div className="stack__hint">Swipe up or down</div>
 
       <AnimatePresence>
-        {zoom && (
-          <PhotoZoom photo={zoom} onClose={() => setZoom(null)} />
-        )}
+        {zoom && <PhotoZoom photo={zoom} onClose={() => setZoom(null)} />}
       </AnimatePresence>
     </motion.div>
   )
 }
 
-function StackCard({ card, rank, total, isFlying, onCommit, onZoomPhoto }) {
+function StackCard({
+  card,
+  rank,
+  total,
+  mover,
+  dir,
+  locked,
+  onArcDone,
+  onSwipe,
+  onZoomPhoto,
+}) {
   const isTop = rank === 0
-  const y = useMotionValue(0) // swipe / fly transform
+  const y = useMotionValue(0)
+  const scale = useMotionValue(1)
+  const [zIndex, setZIndex] = useState(total - rank)
   const [dragging, setDragging] = useState(false)
+  const inited = useRef(false)
 
-  // fly the top card up and away when committed
+  const pres = presentation(rank, total)
+
+  // settle into the stack on first render, then spring to the new depth as the
+  // rank changes (skipped while this card is the one arcing over the top)
   useEffect(() => {
-    if (isFlying && isTop) {
-      animate(y, -window.innerHeight * 1.1, { duration: 0.34, ease: 'easeIn' })
+    if (mover) return
+    if (!inited.current) {
+      inited.current = true
+      y.set(pres.y)
+      scale.set(pres.scale)
+      setZIndex(pres.zIndex)
+      return
     }
-  }, [isFlying, isTop, y])
+    setZIndex(pres.zIndex)
+    const cy = animate(y, pres.y, SPRING)
+    const cs = animate(scale, pres.scale, SPRING)
+    return () => {
+      cy.stop()
+      cs.stop()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rank, mover])
 
-  // when a card stops being the top one, reset its swipe transform
+  // the moving card arcs up over the top, then settles at its new depth
   useEffect(() => {
-    if (!isTop) y.set(0)
-  }, [isTop, y])
-
-  // depth presentation: deeper cards sit slightly up + smaller behind the top
-  const depth = Math.min(rank, MAX_VISIBLE)
-  const presentation = {
-    scale: 1 - depth * 0.05,
-    y: depth * -14,
-    opacity: rank > MAX_VISIBLE ? 0 : 1,
-  }
+    if (!mover) return
+    const lift = -window.innerHeight * 0.42
+    const opts = { duration: ARC_DURATION, times: [0, 0.5, 1], ease: 'easeInOut' }
+    setZIndex(total + 5) // ride above the stack during the arc
+    const cy = animate(y, [y.get(), lift, pres.y], opts)
+    const cs = animate(scale, [scale.get(), 1.02, pres.scale], opts)
+    // when advancing, drop behind the stack at the apex so it tucks to the back
+    const zt =
+      dir === 'up'
+        ? setTimeout(() => setZIndex(pres.zIndex), ARC_DURATION * 500)
+        : null
+    cy.then(() => {
+      setZIndex(pres.zIndex)
+      onArcDone()
+    })
+    return () => {
+      cy.stop()
+      cs.stop()
+      if (zt) clearTimeout(zt)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mover])
 
   const handleDragEnd = (_e, info) => {
     setDragging(false)
-    if (info.offset.y < -SWIPE_COMMIT || info.velocity.y < -400) {
-      onCommit()
+    if (info.offset.y < -SWIPE_COMMIT || info.velocity.y < -500) {
+      onSwipe('up')
+    } else if (info.offset.y > SWIPE_COMMIT || info.velocity.y > 500) {
+      onSwipe('down')
     } else {
-      animate(y, 0, { type: 'spring', stiffness: 500, damping: 35 })
+      animate(y, pres.y, { type: 'spring', stiffness: 500, damping: 35 })
     }
   }
 
   return (
     <motion.div
-      className="stack__slot"
-      style={{ zIndex: total - rank }}
-      animate={presentation}
-      transition={{ type: 'spring', stiffness: 260, damping: 30 }}
+      className="stack__card"
+      style={{ y, scale, zIndex }}
+      drag={isTop && !locked ? 'y' : false}
+      dragConstraints={{ top: -160, bottom: 160 }}
+      dragElastic={0.5}
+      onDragStart={() => setDragging(true)}
+      onDragEnd={handleDragEnd}
     >
-      <motion.div
-        className="stack__swipe"
-        style={{ y }}
-        drag={isTop && !isFlying ? 'y' : false}
-        dragConstraints={{ top: -window.innerHeight, bottom: 0 }}
-        dragElastic={{ top: 0.6, bottom: 0.05 }}
-        onDragStart={() => setDragging(true)}
-        onDrag={(_e, info) => y.set(Math.min(0, info.offset.y))}
-        onDragEnd={handleDragEnd}
-      >
-        <Postcard
-          card={card}
-          interactive={isTop && !dragging}
-          onZoomPhoto={onZoomPhoto}
-        />
-      </motion.div>
+      <Postcard
+        card={card}
+        interactive={isTop && !dragging && !locked}
+        onZoomPhoto={onZoomPhoto}
+      />
     </motion.div>
   )
 }

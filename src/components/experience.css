@@ -242,17 +242,9 @@
   aspect-ratio: 4 / 5;
 }
 
-.stack__slot {
+.stack__card {
   position: absolute;
   inset: 0;
-  display: grid;
-  place-items: center;
-  will-change: transform;
-}
-
-.stack__swipe {
-  width: 100%;
-  height: 100%;
   touch-action: none;
   will-change: transform;
 }
