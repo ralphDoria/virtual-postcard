@@ -7,34 +7,44 @@ import PostcardStack from './components/PostcardStack.jsx'
 import './components/experience.css'
 
 export default function App() {
-  // Overlapping phases:
-  //  1. SkyIntro always renders the sky + writes the greeting.
-  //  2. The envelope mounts BEFORE the writing fully finishes (overlap), so
-  //     the sequence never feels slow.
+  // Phases:
+  //  0. Tap-to-begin gate — the tap starts the sequence AND unlocks audio.
+  //  1. SkyIntro writes the greeting (planes trace in parallel).
+  //  2. The envelope mounts once the writing finishes.
   //  3. Once the user swipes the envelope open, the postcard stack appears.
+  const [started, setStarted] = useState(false)
   const [showEnvelope, setShowEnvelope] = useState(false)
   const [opened, setOpened] = useState(false)
 
   return (
     <div className="stage">
-      <SkyIntro
-        greeting={content.intro.greeting}
-        // Fires a little before the writing fully completes -> overlap.
-        onAlmostDone={() => setShowEnvelope(true)}
-      />
+      {!started && <StartGate onStart={() => setStarted(true)} />}
 
-      {showEnvelope && (
-        <Envelope
-          hint={content.envelope.hint}
-          onOpen={() => setOpened(true)}
-        />
+      {started && (
+        <>
+          <SkyIntro
+            greeting={content.intro.greeting}
+            onAlmostDone={() => setShowEnvelope(true)}
+          />
+
+          {showEnvelope && (
+            <Envelope hint={content.envelope.hint} onOpen={() => setOpened(true)} />
+          )}
+
+          <AnimatePresence>
+            {opened && <PostcardStack key="stack" postcards={content.postcards} />}
+          </AnimatePresence>
+        </>
       )}
-
-      <AnimatePresence>
-        {opened && (
-          <PostcardStack key="stack" postcards={content.postcards} />
-        )}
-      </AnimatePresence>
     </div>
+  )
+}
+
+function StartGate({ onStart }) {
+  return (
+    <button className="start-gate" onClick={onStart} aria-label="Tap to begin">
+      <span className="start-gate__text">Tap to begin</span>
+      <span className="start-gate__hint">Happy Father&rsquo;s Day</span>
+    </button>
   )
 }
