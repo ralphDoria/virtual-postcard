@@ -50,10 +50,10 @@ const messageCard = {
   title: 'A note for you',
   body: [
     'Dad,',
-    'Thank you for every adventure, every lesson, and every laugh along the way.',
-    'Here’s to many more.',
+    'Thank you for all that you\'ve done for us, all the places you\'ve brought us to, all the activities you\'ve enrolled us in to help us grow, and for being our dad.',
+    'P.S. wanna play golf?',
   ],
-  signature: 'Love, your kid',
+  signature: 'Love, your kids',
 }
 
 export const content = {
