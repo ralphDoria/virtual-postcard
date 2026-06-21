@@ -15,10 +15,13 @@ const EXIT_DIR = normalize(1, -0.6) // all planes climb away up-and-right
 const PROPELLER_VOLUME = 0.9 // per-plane propeller loudness (0..1)
 const AUDIO_LEAD = 1 // seconds to start each propeller BEFORE its plane
 
-// CSS sets .sky__writing width to min(82vw, 400px); mirror it so we can size
-// the shared speed before the words mount (planes start off-screen anyway).
-const displayWidth = () =>
-  Math.min((typeof window !== 'undefined' ? window.innerWidth : 400) * 0.82, 400)
+// Mirror the CSS .sky__writing width so the shared speed matches the rendered
+// size: portrait = min(82vw, 400px); landscape = min(82vw, 44vh).
+const displayWidth = () => {
+  if (typeof window === 'undefined') return 400
+  const { innerWidth: w, innerHeight: h } = window
+  return w > h ? Math.min(w * 0.82, h * 0.44) : Math.min(w * 0.82, 400)
+}
 
 export default function SkyIntro({ greeting, onAlmostDone }) {
   const onAlmostDoneRef = useRef(onAlmostDone)

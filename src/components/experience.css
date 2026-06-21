@@ -55,6 +55,16 @@
   gap: 1.4vh;
 }
 
+/* Landscape: the short height can't fit three full-width stacked words, so
+   size the block to the viewport height and center it (portrait unchanged). */
+@media (orientation: landscape) {
+  .sky__writing {
+    top: 50%;
+    width: min(82vw, 44vh);
+    gap: 0.8vh;
+  }
+}
+
 /* one word = one stacked line, traced by its own plane */
 .greeting-line {
   width: 100%;
