@@ -15,9 +15,10 @@
   gap: 1.4vh;
 }
 
-/* one word = one stacked line, traced by the plane */
+/* one word = one stacked line, traced by its own plane */
 .greeting-line {
   width: 100%;
+  position: relative; /* positioning context for this word's plane */
 }
 .greeting-line svg {
   display: block;
@@ -35,7 +36,7 @@
   filter: drop-shadow(0 2px 6px rgba(40, 90, 150, 0.22));
 }
 
-/* the plane rides the leading tip of the stroke (positioned via JS transform) */
+/* the plane image rides the leading tip of the stroke (positioned via JS) */
 .plane {
   position: absolute;
   top: 0;
@@ -43,15 +44,12 @@
   width: 52px;
   height: 52px;
   margin: -26px 0 0 -26px; /* center the icon on its (x,y) point */
+  object-fit: contain;
+  display: block;
   filter: drop-shadow(0 3px 4px rgba(0, 60, 120, 0.25));
   z-index: 2;
   will-change: transform;
-}
-.plane__img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  display: block;
+  pointer-events: none;
 }
 
 /* clouds */

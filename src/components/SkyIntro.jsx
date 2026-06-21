@@ -1,148 +1,40 @@
-import { useLayoutEffect, useRef } from 'react'
-import { animate, useMotionValue } from 'framer-motion'
-// Precomputed uniform-arc-length traces (see scripts/build-greeting.mjs).
-// Each word: { viewBox, polyD, points: [x0,y0,x1,y1,...] } sampled evenly by
-// true distance, so the browser does no path math during the animation.
+import { useRef } from 'react'
+import TracedWord from './TracedWord.jsx'
+import { normalize, polylineLength } from './trace-utils.js'
 import words from '../data/greeting-traced.js'
 import planeSrc from '../assets/plane-topdown-removebg.png'
 
-// Timing knobs
-const WRITE_DURATION = 30 // seconds to write all three words
-const ENVELOPE_AFTER_WORD = 1 // 0-based: start the envelope once this word finishes
-const STROKE_PX = 3 // on-screen stroke thickness (kept uniform across words)
-// the plane art points "up"; headings are 0deg = +x, so rotate +90 to align
-const PLANE_ROTATION = 90
+// Timing / look knobs
+const WRITE_DURATION = 10 // seconds for the LONGEST word to be written
+const STAGGER = 1 // seconds between each plane starting
+const STROKE_PX = 3 // on-screen stroke thickness
+const PLANE_ROTATION = 90 // plane art points "up"; headings are 0deg = +x
+const ENTRANCE_DIR = normalize(1, 0) // all planes fly in from the left
+const EXIT_DIR = normalize(1, -0.6) // all planes climb away up-and-right
+
+// CSS sets .sky__writing width to min(82vw, 400px); mirror it so we can size
+// the shared speed before the words mount (planes start off-screen anyway).
+const displayWidth = () =>
+  Math.min((typeof window !== 'undefined' ? window.innerWidth : 400) * 0.82, 400)
 
 export default function SkyIntro({ greeting, onAlmostDone }) {
-  const containerRef = useRef(null)
-  const line0 = useRef(null)
-  const line1 = useRef(null)
-  const line2 = useRef(null)
-  const planeRef = useRef(null)
-  const firedRef = useRef(false)
-  const progress = useMotionValue(0)
-
-  // keep the latest callback in a ref so this setup effect runs once (on mount)
   const onAlmostDoneRef = useRef(onAlmostDone)
   onAlmostDoneRef.current = onAlmostDone
+  const done = useRef(new Set())
 
-  useLayoutEffect(() => {
-    const container = containerRef.current
-    const lines = [line0.current, line1.current, line2.current]
-    const paths = lines.map((l) => l && l.querySelector('path'))
-    const svgs = lines.map((l) => l && l.querySelector('svg'))
-    if (!container || paths.some((p) => !p)) return
+  // constant speed for every plane: rate (px/sec) from the longest word, so the
+  // longest takes WRITE_DURATION to write and the rest finish sooner.
+  const w = displayWidth()
+  const screenLens = words.map((word) => {
+    const vbWidth = parseFloat(word.viewBox.split(' ')[2]) || 1
+    return (w * polylineLength(word.points)) / vbWidth
+  })
+  const rate = Math.max(...screenLens) / WRITE_DURATION
 
-    // one-time layout reads
-    const crect = container.getBoundingClientRect()
-    const ctms = paths.map((p) => p.getScreenCTM())
-    const pts = svgs.map((s) => s.createSVGPoint())
-    const scales = ctms.map((m) => m.a) // screen px per user unit, per word
-    const lens = paths.map((p) => p.getTotalLength()) // polyline = true length
-
-    paths.forEach((p, i) => {
-      p.style.strokeWidth = `${STROKE_PX / scales[i]}`
-      p.style.strokeDasharray = `${lens[i]}`
-      p.style.strokeDashoffset = `${lens[i]}`
-    })
-
-    // map a uniform point (user coords) to container px
-    const toScreen = (i, ux, uy) => {
-      pts[i].x = ux
-      pts[i].y = uy
-      const s = pts[i].matrixTransform(ctms[i])
-      return { x: s.x - crect.left, y: s.y - crect.top }
-    }
-    // point on word i at fraction f (0..1) — O(1) lookup into the uniform table
-    const screenAt = (i, f) => {
-      const P = words[i].points
-      const n = P.length / 2
-      const idx = clamp(f, 0, 1) * (n - 1)
-      const k = Math.min(Math.floor(idx), n - 2)
-      const t = idx - k
-      const x = P[k * 2] + (P[(k + 1) * 2] - P[k * 2]) * t
-      const y = P[k * 2 + 1] + (P[(k + 1) * 2 + 1] - P[k * 2 + 1]) * t
-      return toScreen(i, x, y)
-    }
-    const starts = paths.map((_, i) => screenAt(i, 0))
-    const ends = paths.map((_, i) => screenAt(i, 1))
-
-    // timeline weighted by on-screen length -> constant screen speed everywhere
-    const dist2 = (a, b) => Math.hypot(b.x - a.x, b.y - a.y)
-    const segs = []
-    let acc = 0
-    for (let i = 0; i < paths.length; i++) {
-      const weight = lens[i] * scales[i]
-      segs.push({ type: 'draw', i, start: acc, weight })
-      acc += weight
-      if (i < paths.length - 1) {
-        const glide = dist2(ends[i], starts[i + 1])
-        segs.push({ type: 'fly', from: i, to: i + 1, start: acc, weight: glide })
-        acc += glide
-      }
-    }
-    const total = acc
-
-    const triggerSeg = segs.find(
-      (s) => s.type === 'draw' && s.i === ENVELOPE_AFTER_WORD,
-    )
-    const fireAt = (triggerSeg.start + triggerSeg.weight) / total
-
-    const place = (x, y, deg) => {
-      planeRef.current.style.transform = `translate(${x}px, ${y}px) rotate(${
-        deg + PLANE_ROTATION
-      }deg)`
-    }
-    const heading = (a, b) => (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI
-
-    const render = (p) => {
-      const dist = p * total
-
-      // reveal each word up to its own progress
-      paths.forEach((path, i) => {
-        const seg = segs.find((s) => s.type === 'draw' && s.i === i)
-        const f = clamp((dist - seg.start) / seg.weight, 0, 1)
-        path.style.strokeDashoffset = `${lens[i] * (1 - f)}`
-      })
-
-      // plane position
-      const seg =
-        segs.find((s) => dist >= s.start && dist <= s.start + s.weight) ||
-        segs[segs.length - 1]
-      if (seg.type === 'draw') {
-        const f = clamp((dist - seg.start) / seg.weight, 0, 1)
-        const here = screenAt(seg.i, f)
-        const ahead = screenAt(seg.i, Math.min(1, f + 0.004))
-        place(here.x, here.y, heading(here, ahead))
-      } else {
-        const t = clamp((dist - seg.start) / seg.weight, 0, 1)
-        const a = ends[seg.from]
-        const b = starts[seg.to]
-        place(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, heading(a, b))
-      }
-    }
-
-    render(0)
-
-    const controls = animate(progress, 1, {
-      duration: WRITE_DURATION,
-      ease: 'linear', // constant pen speed across the whole sequence
-    })
-    const unsub = progress.on('change', (p) => {
-      render(p)
-      if (!firedRef.current && p >= fireAt) {
-        firedRef.current = true
-        onAlmostDoneRef.current?.()
-      }
-    })
-
-    return () => {
-      controls.stop()
-      unsub()
-    }
-    // build-once: progress is stable; callback read via ref
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [progress])
+  const handleComplete = (i) => {
+    done.current.add(i)
+    if (done.current.size >= words.length) onAlmostDoneRef.current?.()
+  }
 
   return (
     <div className="sky fill" aria-label={greeting}>
@@ -151,28 +43,22 @@ export default function SkyIntro({ greeting, onAlmostDone }) {
       <div className="cloud cloud--b" />
       <div className="cloud cloud--c" />
 
-      <div className="sky__writing" ref={containerRef}>
-        {[line0, line1, line2].map((ref, i) => (
-          <div className="greeting-line" ref={ref} key={i}>
-            <svg viewBox={words[i].viewBox} preserveAspectRatio="xMidYMid meet" aria-hidden="true">
-              <path d={words[i].polyD} fill="none" />
-            </svg>
-          </div>
+      <div className="sky__writing">
+        {words.map((word, i) => (
+          <TracedWord
+            key={i}
+            word={word}
+            rate={rate}
+            entranceDir={ENTRANCE_DIR}
+            exitDir={EXIT_DIR}
+            planeRotation={PLANE_ROTATION}
+            planeSrc={planeSrc}
+            strokePx={STROKE_PX}
+            startDelay={i * STAGGER}
+            onComplete={() => handleComplete(i)}
+          />
         ))}
-
-        <div className="plane" ref={planeRef} aria-hidden="true">
-          <PlaneIcon />
-        </div>
       </div>
     </div>
   )
-}
-
-function clamp(v, lo, hi) {
-  return v < lo ? lo : v > hi ? hi : v
-}
-
-function PlaneIcon() {
-  // top-down plane art (nose up); rotation handled in `place` via PLANE_ROTATION
-  return <img className="plane__img" src={planeSrc} alt="" draggable="false" />
 }
