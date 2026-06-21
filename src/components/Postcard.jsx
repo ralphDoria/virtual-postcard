@@ -1,37 +1,28 @@
-// A single postcard: either a photo collage (a year) or the written message.
+// A single postcard: one photo, or the written message.
 export default function Postcard({ card, interactive, onZoomPhoto }) {
   if (card.type === 'message') {
     return <MessageCard card={card} />
   }
-  return <CollageCard card={card} interactive={interactive} onZoomPhoto={onZoomPhoto} />
+  return <PhotoCard card={card} interactive={interactive} onZoomPhoto={onZoomPhoto} />
 }
 
-function CollageCard({ card, interactive, onZoomPhoto }) {
-  const photos = card.photos || []
-  const count = Math.min(photos.length, 6)
-
+function PhotoCard({ card, interactive, onZoomPhoto }) {
   return (
-    <div className="postcard postcard--collage">
-      <div className={`collage collage--${count}`}>
-        {photos.slice(0, 6).map((photo, i) => (
-          <button
-            key={i}
-            className="collage__cell"
-            // only the top, settled card lets you zoom — avoids accidental
-            // taps while swiping or on cards underneath
-            onClick={() => interactive && onZoomPhoto(photo)}
-            tabIndex={interactive ? 0 : -1}
-            aria-label={photo.alt || photo.caption || 'Photo'}
-          >
-            {photo.src ? (
-              <img className="collage__img" src={photo.src} alt={photo.alt || ''} />
-            ) : (
-              <span className="collage__placeholder">{photo.caption || 'Photo'}</span>
-            )}
-          </button>
-        ))}
-      </div>
-      {card.title && <div className="postcard__title">{card.title}</div>}
+    <div className="postcard postcard--photo">
+      <button
+        className="photo"
+        // only the settled front card lets you zoom (avoids taps mid-swipe)
+        onClick={() => interactive && onZoomPhoto(card)}
+        tabIndex={interactive ? 0 : -1}
+        aria-label={card.alt || card.caption || 'Photo'}
+      >
+        {card.src ? (
+          <img className="photo__img" src={card.src} alt={card.alt || ''} />
+        ) : (
+          <span className="photo__placeholder">Photo</span>
+        )}
+      </button>
+      {card.caption && <div className="postcard__title">{card.caption}</div>}
     </div>
   )
 }
